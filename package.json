@@ -1,0 +1,22 @@
+{
+  "name": "simple-email-service",
+  "version": "1.0.0",
+  "description": "A simple Express service for sending emails via MCP server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": ["email", "express", "mcp", "smtp"],
+  "author": "Shreyas",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "nodemailer": "^6.9.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

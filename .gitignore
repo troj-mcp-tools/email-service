@@ -1,0 +1,62 @@
+# ---- Node / JavaScript ----
+node_modules/
+# Dependency caches
+.npm/
+.pnpm-store/
+.yarn/
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build outputs
+build/
+dist/
+.tmp/
+tmp/
+.temp/
+.cache/
+coverage/
+
+# TypeScript
+*.tsbuildinfo
+
+# Testing
+.junit/
+.coverage/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+client_secrets.json
+
+# Local tooling / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Framework/platform (safe to ignore if present)
+.next/
+.nuxt/
+.svelte-kit/
+.vercel/
+.netlify/
+
+# Misc
+*.local
+*.orig
+
+# Do not ignore lockfiles (keep them tracked)
+!package-lock.json
+!yarn.lock
+!pnpm-lock.yaml
