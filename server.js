@@ -5,6 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const emailService = require('./services/emailService');
 const gmailService = require('./services/gmailService');
+const calendarService = require('./services/calendarService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -59,7 +60,12 @@ app.get('/health', (req, res) => {
 // OAuth initiation (get consent URL)
 app.get('/oauth2/init', (req, res) => {
   try {
-    const url = gmailService.getAuthUrl();
+    // Optional: ?scope=gmail|calendar|both
+    const scopeParam = (req.query.scope || 'both').toString();
+    let scopes;
+    if (scopeParam === 'gmail') scopes = gmailService.GMAIL_SCOPES;
+    else if (scopeParam === 'calendar') scopes = gmailService.CAL_SCOPES;
+    const url = gmailService.getAuthUrl(scopes);
     res.json({ success: true, url });
   } catch (error) {
     res.status(400).json({ error: 'OAuth init failed', message: error.message });
@@ -154,6 +160,36 @@ app.post('/read-email', async (req, res) => {
   }
 });
 
+// Schedule Google Meet (Calendar event)
+app.post('/schedule-meet', async (req, res) => {
+  try {
+    const params = req.body || {};
+    const result = await calendarService.createMeetEvent(params, req.requestId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error(`[${req.requestId}] Error scheduling meet:`, error);
+    res.status(500).json({
+      error: 'Failed to schedule meet',
+      message: error.message
+    });
+  }
+});
+
+// List Calendar events
+app.post('/list-events', async (req, res) => {
+  try {
+    const params = req.body || {};
+    const result = await calendarService.listEvents(params, req.requestId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error(`[${req.requestId}] Error listing events:`, error);
+    res.status(500).json({
+      error: 'Failed to list events',
+      message: error.message
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -172,7 +208,9 @@ app.use('*', (req, res) => {
       'GET /oauth2/init',
       'GET /oauth2/callback?code=...',
       'POST /send-email',
-      'POST /read-email'
+      'POST /read-email',
+      'POST /schedule-meet',
+      'POST /list-events'
     ]
   });
 });
@@ -184,4 +222,6 @@ app.listen(PORT, () => {
   console.log(`OAuth cb:    GET http://localhost:${PORT}/oauth2/callback?code=...`);
   console.log(`Send email:  POST http://localhost:${PORT}/send-email`);
   console.log(`Read email:  POST http://localhost:${PORT}/read-email`);
+  console.log(`Schedule meet: POST http://localhost:${PORT}/schedule-meet`);
+  console.log(`List events: POST http://localhost:${PORT}/list-events`);
 });

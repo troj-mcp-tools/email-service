@@ -11,6 +11,7 @@ A simple Express.js service that acts as an email tool for your MCP server. This
 - Health check endpoint
 - CORS enabled for cross-origin requests
 - Read emails from Gmail via filters (sender, subject, free-text, date range)
+- Create Google Calendar events with Google Meet links
 
 ## Setup
 
@@ -41,51 +42,33 @@ SMTP_PASS=your-app-password
 # Server Configuration
 PORT=3000
 
-# Google OAuth2 for Gmail (reading)
-# Recommended: use a refresh token acquired via OAuth consent
+# Google OAuth2 for Gmail & Calendar
 GOOGLE_CLIENT_ID=your-client-id
 GOOGLE_CLIENT_SECRET=your-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:3000/oauth2/callback
 GOOGLE_REFRESH_TOKEN=your-refresh-token
 ```
 
-### 3. Gmail Setup (if using Gmail)
+### 3. Gmail/Calendar Setup
 
-If you're using Gmail for sending, you'll need to:
-
-1. Enable 2-factor authentication on your Google account
-2. Generate an App Password:
-   - Go to Google Account settings
-   - Security → 2-Step Verification → App passwords
-   - Generate a password for "Mail"
-   - Use this password in your `SMTP_PASS` environment variable
-
-For reading Gmail via API:
-
-1. Create a Google Cloud project and enable the Gmail API
-2. Create OAuth 2.0 Client (type: Web or Desktop)
-3. Obtain `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-4. Get a `GOOGLE_REFRESH_TOKEN` (via an OAuth consent flow) and set it in `.env`
+- Enable APIs in your Google Cloud project: Gmail API and Google Calendar API
+- Create an OAuth 2.0 Client and configure the authorized redirect URI
+- Use the OAuth Flow below to mint a refresh token
 
 #### OAuth Flow (to mint a refresh token)
 1. Start the server, then open:
-   - `GET http://localhost:3000/oauth2/init` → copy the `url`
-2. Visit the URL, consent with the Gmail account you want to read
+   - `GET http://localhost:3000/oauth2/init?scope=both` (default includes Gmail + Calendar)
+2. Visit the URL, consent with the account
 3. You’ll be redirected to `GOOGLE_REDIRECT_URI` with `?code=...`
 4. Call `GET http://localhost:3000/oauth2/callback?code=...`
-5. Response includes tokens (access redacted) and writes `token.json` locally for dev. Copy `refresh_token` into `.env` as `GOOGLE_REFRESH_TOKEN`.
+5. Copy `refresh_token` into `.env` as `GOOGLE_REFRESH_TOKEN`, restart
 
 ### 4. Start the Service
 
 ```bash
-# Development mode with auto-restart
-npm run dev
-
-# Production mode
-npm start
+npm run dev   # development
+npm start     # production
 ```
-
-The service will start on `http://localhost:3000` (or the port specified in your `.env` file).
 
 ## API Endpoints
 
@@ -94,29 +77,9 @@ The service will start on `http://localhost:3000` (or the port specified in your
 GET /health
 ```
 
-Returns the service status.
-
 ### Send Email
 ```
 POST /send-email
-```
-
-**Request Body:**
-```json
-{
-  "to": "recipient@example.com",
-  "subject": "Your email subject",
-  "body": "Your email body content"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Email sent successfully",
-  "messageId": "message-id-from-smtp"
-}
 ```
 
 ### Read Emails (Gmail)
@@ -124,86 +87,94 @@ POST /send-email
 POST /read-email
 ```
 
-Searches your Gmail mailbox using simple filters and returns recent matching emails.
+### Schedule Google Meet (Calendar)
+```
+POST /schedule-meet
+```
+Create a calendar event on the primary calendar with a Meet link.
 
-**Request Body (filters):**
+Request body:
 ```json
 {
-  "fromEmail": "sender@example.com",
-  "fromName": "Shubha SV",
-  "subjectContains": "MCP server",
-  "threadContains": "MCP server",
-  "after": "2025-10-01",
-  "before": "2025-10-20",
-  "maxResults": 5,
-  "includeBody": true
+  "title": "Design sync",
+  "description": "Review MCP server changes",
+  "start": "2025-10-21T10:00:00Z",
+  "end": "2025-10-21T10:30:00Z",
+  "timeZone": "UTC",
+  "attendees": ["alice@example.com", "bob@example.com"],
+  "sendUpdates": "all",
+  "reminders": { "useDefault": true }
 }
 ```
-- `fromEmail`: exact email address filter
-- `fromName`: free-text term (helps match sender display name)
-- `subjectContains`: matches subject terms
-- `threadContains`: free-text search across conversation
-- `after`/`before`: ISO date or `YYYY/MM/DD`
-- `maxResults`: capped at 25
-- `includeBody`: if true, tries to extract text body (slower)
 
-**Response:**
+Response (example):
 ```json
 {
   "success": true,
-  "query": "in:anywhere from:\"sender@example.com\" subject:\"MCP server\" MCP server after:2025/10/01 before:2025/10/20",
+  "id": "eventId",
+  "htmlLink": "https://www.google.com/calendar/event?eid=...",
+  "status": "confirmed",
+  "meetLink": "https://meet.google.com/abc-defg-hij",
+  "start": { "dateTime": "2025-10-21T10:00:00Z", "timeZone": "UTC" },
+  "end": { "dateTime": "2025-10-21T10:30:00Z", "timeZone": "UTC" },
+  "attendees": [ { "email": "alice@example.com" }, { "email": "bob@example.com" } ]
+}
+```
+
+### List Calendar Events
+```
+POST /list-events
+```
+View calendar events with attendees, times, and details.
+
+Request body (filters):
+```json
+{
+  "timeMin": "2025-10-20T00:00:00Z",
+  "timeMax": "2025-10-27T23:59:59Z",
+  "maxResults": 10,
+  "q": "meeting",
+  "calendarId": "primary"
+}
+```
+
+Response (example):
+```json
+{
+  "success": true,
   "total": 2,
-  "emails": [
+  "timeZone": "America/New_York",
+  "events": [
     {
-      "id": "185c...",
-      "threadId": "185c...",
-      "snippet": "...",
-      "from": "Shubha SV <shubha@example.com>",
-      "to": "you@example.com",
-      "subject": "Re: MCP server thread",
-      "date": "Mon, 20 Oct 2025 10:12:00 +0000",
-      "body": "Full text if includeBody=true"
+      "id": "eventId1",
+      "summary": "Design sync",
+      "description": "Review MCP server changes",
+      "start": { "dateTime": "2025-10-21T10:00:00Z", "timeZone": "UTC" },
+      "end": { "dateTime": "2025-10-21T10:30:00Z", "timeZone": "UTC" },
+      "location": "",
+      "attendees": [
+        { "email": "alice@example.com", "displayName": "Alice", "responseStatus": "accepted" },
+        { "email": "bob@example.com", "displayName": "Bob", "responseStatus": "needsAction" }
+      ],
+      "organizer": { "email": "you@example.com", "displayName": "You" },
+      "status": "confirmed",
+      "htmlLink": "https://www.google.com/calendar/event?eid=...",
+      "meetLink": "https://meet.google.com/abc-defg-hij",
+      "created": "2025-10-20T15:30:00.000Z",
+      "updated": "2025-10-20T15:30:00.000Z"
     }
   ]
 }
 ```
 
-## Integration with MCP Server
+Notes:
+- Requires Calendar scope `https://www.googleapis.com/auth/calendar.events` (included by default in `/oauth2/init?scope=both`).
+- Meet link is provided via `conferenceData.createRequest`.
+- `timeMin`/`timeMax`: ISO date strings for filtering events by time range.
+- `q`: free-text search query.
+- `maxResults`: capped at 250.
 
-This service is designed to be used as tools in your MCP server. Besides sending, you can call `/read-email` to fetch messages for contextual actions (e.g., read "email from Shubha about MCP server").
-
-## Error Handling
-
-The service includes comprehensive error handling:
-
-- Input validation for required fields
-- Email format validation
-- SMTP connection verification
-- Detailed error messages
-
-## Security Notes
-
-- Never commit your `.env` file to version control
-- Use app-specific passwords for Gmail
-- Use least-privileged OAuth scopes; this uses `gmail.readonly`
-- `.gitignore` includes token artifacts (`token.json`, `tokens/`)
-- The service includes CORS for cross-origin requests
-
-## Troubleshooting
-
-### Common Issues
-
-1. **OAuth missing/invalid**
-   - Ensure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REFRESH_TOKEN` are set
-   - Refresh tokens can be revoked; re-consent if needed
-
-2. **No results**
-   - Loosen filters or omit `before/after`
-   - Try without `fromName` and rely on `fromEmail`
-
-3. **Body missing**
-   - Some emails only have HTML; set `includeBody=true` to attempt extraction
-
-## License
-
-MIT
+## Security & Troubleshooting
+- Keep `.env` out of version control
+- If you get 403 accessNotConfigured, enable the API in Google Cloud console
+- Ensure the OAuth client and the enabled APIs belong to the same project

@@ -2,8 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
 
-// Scopes for read-only Gmail access
+// Scopes
 const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+const CAL_SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
 
 function createOAuthClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -29,7 +30,7 @@ function createOAuthClient() {
   throw new Error('No Google OAuth credentials found. Set GOOGLE_REFRESH_TOKEN or provide token.json.');
 }
 
-function getAuthUrl() {
+function getAuthUrl(scopes) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'urn:ietf:wg:oauth:2.0:oob';
@@ -37,10 +38,11 @@ function getAuthUrl() {
     throw new Error('Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET');
   }
   const oAuth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+  const scopeList = Array.isArray(scopes) && scopes.length > 0 ? scopes : [...GMAIL_SCOPES, ...CAL_SCOPES];
   return oAuth2Client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
-    scope: GMAIL_SCOPES
+    scope: scopeList
   });
 }
 
@@ -198,5 +200,7 @@ async function searchEmails(filters = {}, requestId = 'unknown') {
 module.exports = {
   searchEmails,
   getAuthUrl,
-  exchangeCodeForTokens
+  exchangeCodeForTokens,
+  GMAIL_SCOPES,
+  CAL_SCOPES
 };
