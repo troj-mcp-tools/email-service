@@ -34,6 +34,9 @@ coverage/
 .env.*
 !.env.example
 client_secrets.json
+# Google OAuth tokens (local dev)
+token.json
+tokens/
 
 # Local tooling / editors
 .vscode/

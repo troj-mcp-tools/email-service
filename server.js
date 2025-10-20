@@ -4,6 +4,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const emailService = require('./services/emailService');
+const gmailService = require('./services/gmailService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -53,6 +54,31 @@ app.use(express.json());
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Email service is running' });
+});
+
+// OAuth initiation (get consent URL)
+app.get('/oauth2/init', (req, res) => {
+  try {
+    const url = gmailService.getAuthUrl();
+    res.json({ success: true, url });
+  } catch (error) {
+    res.status(400).json({ error: 'OAuth init failed', message: error.message });
+  }
+});
+
+// OAuth callback: exchange ?code= for tokens
+app.get('/oauth2/callback', async (req, res) => {
+  try {
+    const code = req.query.code;
+    if (!code) {
+      return res.status(400).json({ error: 'Missing code parameter' });
+    }
+    const tokens = await gmailService.exchangeCodeForTokens(code);
+    // Show a safe message; tokens are also written to token.json for local dev
+    res.json({ success: true, tokens: { ...tokens, access_token: 'redacted', id_token: 'redacted' } });
+  } catch (error) {
+    res.status(500).json({ error: 'OAuth exchange failed', message: error.message });
+  }
 });
 
 // Test SMTP connection endpoint
@@ -111,6 +137,23 @@ app.post('/send-email', async (req, res) => {
   }
 });
 
+// Read email endpoint
+app.post('/read-email', async (req, res) => {
+  try {
+    const filters = req.body || {};
+
+    const result = await gmailService.searchEmails(filters, req.requestId);
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error(`[${req.requestId}] Error reading emails:`, error);
+    res.status(500).json({
+      error: 'Failed to read emails',
+      message: error.message
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -126,7 +169,10 @@ app.use('*', (req, res) => {
     error: 'Endpoint not found',
     availableEndpoints: [
       'GET /health',
-      'POST /send-email'
+      'GET /oauth2/init',
+      'GET /oauth2/callback?code=...',
+      'POST /send-email',
+      'POST /read-email'
     ]
   });
 });
@@ -134,5 +180,8 @@ app.use('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Email service running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Send email: POST http://localhost:${PORT}/send-email`);
+  console.log(`OAuth init:  GET http://localhost:${PORT}/oauth2/init`);
+  console.log(`OAuth cb:    GET http://localhost:${PORT}/oauth2/callback?code=...`);
+  console.log(`Send email:  POST http://localhost:${PORT}/send-email`);
+  console.log(`Read email:  POST http://localhost:${PORT}/read-email`);
 });
